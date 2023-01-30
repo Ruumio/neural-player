@@ -2,9 +2,10 @@ import type { VectorTime } from "$lib/types";
 import { PrismaClient, type User } from "@prisma/client";
 
 const d = await import("$lib/ws/getIO")
-const ws = await d.getIO()
 
 const db = new PrismaClient();
+
+export const prerender = true;
 
 let positions: Record<string, VectorTime[]> = {};
 let timeout: NodeJS.Timeout | null = null;
@@ -64,11 +65,13 @@ async function savePlayerPosition(id: string, pos: VectorTime) {
 
 }
 
-ws.on("connect", (socket) => {
-  socket.on("playerPosition", (data) => {
-    // savePlayerPosition(socket.id, data)
+d.getIO().then(ws => {
+  ws.on("connect", (socket) => {
+    socket.on("playerPosition", (data) => {
+      //
+    })
   })
-})
+}).catch(e => console.log(e))
 
 export { };
 

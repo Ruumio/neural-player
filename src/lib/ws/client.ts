@@ -13,7 +13,7 @@ function getSocket() {
 }
 
 export function getId() {
-  return getSocket().id;
+  return getSocket().id || "me";
 }
 
 export async function send<T extends keyof MsgTypes>(msgType: T, data: MsgTypes[T]) {

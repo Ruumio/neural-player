@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { addPlayerPosition, ownPosition, playersPositions } from '$lib/store';
 	import * as socket from '$lib/ws/client';
-	import { LayersModel, loadLayersModel, tensor2d } from '@tensorflow/tfjs';
+	import { type LayersModel, loadLayersModel, tensor2d, profile } from '@tensorflow/tfjs';
 	import { vecLength, vecMultiply } from '$lib/math';
 
 	let canvas: HTMLCanvasElement;
@@ -27,7 +27,7 @@
 
 	let model: LayersModel;
 	async function loadModel() {
-		model = await loadLayersModel('/model-lstm/model.json');
+		model = await loadLayersModel('/model-lstm-002/model.json');
 	}
 	async function predict(input: number[][]) {
 		if (input.length !== 10) return;
@@ -81,8 +81,8 @@
 			console.log(predictionResult);
 			ctx.fillStyle = 'black';
 			ctx.fillRect(
-				$ownPosition.x - (predictionResult[1] + 0.5) * 100,
-				$ownPosition.y - predictionResult[0] * 100,
+				$ownPosition.x - predictionResult[0] * 100,
+				$ownPosition.y - predictionResult[1] * 100,
 				10,
 				10
 			);
@@ -163,10 +163,12 @@
 		mouseDownVec = { x: ev.clientX, y: ev.clientY };
 	}
 	const timeout = setInterval(async () => {
-		addPlayerPosition(socket.getId(), $ownPosition);
+		const socketId = socket.getId();
+
+		addPlayerPosition(socketId, $ownPosition);
 
 		if (model) {
-			const points = $playersPositions[socket.getId()];
+			const points = $playersPositions[socketId];
 
 			if (points) {
 				const predictInput = points.map((p) => [p.x, p.y]).slice(-10);
@@ -184,11 +186,30 @@
 
 	onMount(async () => {
 		ctx = canvas.getContext('2d');
+
 		$ownPosition = { x: width / 2, y: height / 2 };
-		draw();
-		loadModel();
 
 		handleResize();
+
+		draw();
+
+		const result = await profile(async () => {
+			await loadModel();
+			await predict([
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0],
+				[0, 0]
+			]);
+		});
+
+		console.log(result);
 
 		return () => {
 			clearInterval(timeout);

@@ -33,6 +33,7 @@
   "type": "module",
   "dependencies": {
     "@prisma/client": "^4.9.0",
+    "@sveltejs/adapter-static": "^1.0.5",
     "@tensorflow/tfjs": "^4.2.0",
     "@tensorflow/tfjs-node": "^4.2.0",
     "express": "^4.18.2",

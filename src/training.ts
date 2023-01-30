@@ -1,7 +1,18 @@
 import { PrismaClient, type DataPoint } from "@prisma/client";
-import * as tf from "@tensorflow/tfjs-node";
+import { layers, LayersModel, loadLayersModel, Sequential, sequential, Tensor, tensor2d } from "@tensorflow/tfjs-node";
+import { mkdir } from "fs/promises";
 
 const db = new PrismaClient();
+const AMOUNT_VEC = 10;
+const EPOCH_SIZE = 100;
+const MODEL_VERSION = "002"
+const MODEL_FILE = `file://static/model-lstm-${MODEL_VERSION}/`
+
+try {
+  await mkdir("static/model-lstm-" + MODEL_VERSION);
+} catch {
+  // TODO: Handle error
+}
 
 function pointsToArray(points: DataPoint[]) {
 
@@ -18,21 +29,20 @@ function pointsToArray(points: DataPoint[]) {
 // function to format a duration as HH:MM:SS;
 function formatDuration(duration: number): string {
   const d = Math.min(duration, 1000000000);
-  return new Date(d * 1000).toISOString().substr(11, 8);
+  return new Date(d * 1000).toISOString().slice(11, 19);
 }
 formatDuration(-1)
 
-const AMOUNT_VEC = 5;
-const EPOCH_SIZE = 100;
 
-async function trainModel(playerMovements: number[][]): Promise<tf.Sequential> {
+async function trainModel(playerMovements: number[][]): Promise<Sequential> {
   // Convert the input data to a Tensor
-  const movements = tf.tensor2d(playerMovements);
+  const movements = tensor2d(playerMovements);
 
   // Define the model
-  const model = tf.sequential();
-  model.add(tf.layers.lstm({ units: 64, inputShape: [AMOUNT_VEC, 2] }));
-  model.add(tf.layers.dense({ units: 2 }));
+  const model = sequential();
+  model.add(layers.lstm({ units: 64, inputShape: [AMOUNT_VEC, 2] }));
+  model.add(layers.dense({ units: 32, activation: 'relu' }));
+  model.add(layers.dense({ units: 2 }));
 
   // Compile the model
   model.compile({ optimizer: 'adam', loss: 'meanSquaredError' });
@@ -47,7 +57,7 @@ async function trainModel(playerMovements: number[][]): Promise<tf.Sequential> {
       epochs: EPOCH_SIZE,
       verbose: 0,
       callbacks: {
-        onEpochEnd: (epoch, logs) => {
+        onEpochEnd: (epoch) => {
 
           const totalEpochs = movements.shape[0] - AMOUNT_VEC;
           const epochPercentage = epoch / EPOCH_SIZE;
@@ -68,28 +78,32 @@ async function trainModel(playerMovements: number[][]): Promise<tf.Sequential> {
 async function main() {
 
   const points = await db.dataPoint.findMany({
-    take: 500
+    take: 300
   })
 
-  let model: tf.LayersModel | null = null;
+  let model: LayersModel | null = null;
 
   try {
-    model = await tf.loadLayersModel("file://model-lstm/model.json");
+    model = await loadLayersModel(MODEL_FILE + "/model.json");
   } catch {
     //TODO: Handle error
   }
 
-  if (!model) {
+  const shouldTrain = true;
+  if (!model || shouldTrain) {
     const pointsArr = pointsToArray(points);
     model = await trainModel(pointsArr)
+    if (model) {
+      await model.save(MODEL_FILE);
+    }
   }
 
-  await model.save("file://model-lstm");
-
-  const playerMovements = [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]];
-  const last5Moves = playerMovements.slice(-AMOUNT_VEC);
-  const nextMove = model.predict(tf.tensor2d(last5Moves).reshape([1, AMOUNT_VEC, 2])) as tf.Tensor;
-  console.log("Next move:", nextMove.dataSync());
+  if (model) {
+    const playerMovements = [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]];
+    const last5Moves = playerMovements.slice(-AMOUNT_VEC);
+    const nextMove = model.predict(tensor2d(last5Moves).reshape([1, AMOUNT_VEC, 2])) as Tensor;
+    console.log("Next move:", nextMove.dataSync());
+  }
 }
 
 main()
